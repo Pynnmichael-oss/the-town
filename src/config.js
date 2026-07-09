@@ -3,6 +3,22 @@ export const TILE_SIZE = 32;
 export const GAME_WIDTH = 800;
 export const GAME_HEIGHT = 600;
 
+// Building footprint sprite keys - must match the BuildingFootprints object
+// names in assets/maps/town.json (see gen_town_map.py and
+// assets/higgsfield-spec.md). PreloadScene requests
+// assets/sprites/buildings/<key>.png for each; TownScene reads the same
+// names straight off the map's BuildingFootprints layer, so this list only
+// needs to stay in sync with what PreloadScene requests.
+export const BUILDING_SPRITE_KEYS = [
+  'touchgrass_pavilion',
+  'shortsleeve_dock',
+  'twin_silo',
+  'roberts_fuel',
+  'summer_nicole_films',
+  'all_hands_detailing',
+  'fourwinds',
+];
+
 // Building id -> { name, url }. Matches the trigger-zone object names placed in the Tiled map.
 export const BUILDINGS = {
   touchgrass: {

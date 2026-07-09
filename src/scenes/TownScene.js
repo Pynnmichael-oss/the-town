@@ -18,6 +18,18 @@ export class TownScene extends Phaser.Scene {
     groundLayer.setCollisionByProperty({ collides: true });
     buildingsLayer.setCollisionByProperty({ collides: true });
 
+    // Real building art (assets/higgsfield-spec.md) drops in as
+    // assets/sprites/buildings/<name>.png with no scene-code change: this
+    // only adds an overlay when PreloadScene actually loaded that texture,
+    // so a missing file just leaves the flat-color tile fill underneath
+    // showing through unchanged - collision stays on buildingsLayer either way.
+    map.getObjectLayer('BuildingFootprints').objects.forEach((obj) => {
+      const textureKey = `building_${obj.name}`;
+      if (!this.textures.exists(textureKey)) return;
+      const image = this.add.image(obj.x + obj.width / 2, obj.y + obj.height / 2, textureKey);
+      image.setDisplaySize(obj.width, obj.height);
+    });
+
     this.physics.world.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
     this.cameras.main.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
 
