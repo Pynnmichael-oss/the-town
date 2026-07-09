@@ -32,6 +32,14 @@ export class PreloadScene extends Phaser.Scene {
     BUILDING_SPRITE_KEYS.forEach((key) => {
       this.load.image(`building_${key}`, `assets/sprites/buildings/${key}.png`);
     });
+
+    // Placeholder CC0 SFX (see assets/CREDITS.md) - same fail-silent seam as
+    // the art above: a failed/blocked load just lands the key in
+    // failedKeys, and TownScene checks the audio cache before ever calling
+    // sound.add/play, so missing or blocked audio never breaks the scene.
+    this.load.audio('footstep-1', 'assets/audio/footstep-1.ogg');
+    this.load.audio('footstep-2', 'assets/audio/footstep-2.ogg');
+    this.load.audio('ambient-town', 'assets/audio/ambient-town.mp3');
   }
 
   create() {

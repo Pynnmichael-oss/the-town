@@ -4,6 +4,8 @@ import { animKeyFor } from '../anims.js';
 
 const PLAYER_SPEED = 160;
 const SIGNPOST_RADIUS = 48;
+const FOOTSTEP_INTERVAL_MS = 260;
+const FOOTSTEP_KEYS = ['footstep-1', 'footstep-2'];
 
 export class TownScene extends Phaser.Scene {
   constructor() {
@@ -83,6 +85,44 @@ export class TownScene extends Phaser.Scene {
         toggleDirectory();
       }
     });
+
+    this.footstepKeys = FOOTSTEP_KEYS.filter((key) => this.cache.audio.exists(key));
+    this.stepIndex = 0;
+    this.lastStepAt = 0;
+
+    this.startAmbientSound();
+  }
+
+  // Autoplay policies (and headless/CI browsers) commonly block audio until
+  // a user gesture or block it outright - none of that may ever throw, but
+  // it must never stop the scene from loading or playing, so every audio
+  // call in this scene is try/catch-wrapped and gated on the asset having
+  // actually made it into the cache (see PreloadScene's failedKeys seam).
+  startAmbientSound() {
+    if (!this.cache.audio.exists('ambient-town')) return;
+    const play = () => {
+      try {
+        this.sound.add('ambient-town', { loop: true, volume: 0.25 }).play();
+      } catch (e) {
+        // non-fatal: game continues silently without ambient sound
+      }
+    };
+    if (this.sound.locked) {
+      this.sound.once('unlocked', play);
+    } else {
+      play();
+    }
+  }
+
+  playFootstep() {
+    if (!this.footstepKeys.length) return;
+    const key = this.footstepKeys[this.stepIndex % this.footstepKeys.length];
+    this.stepIndex++;
+    try {
+      this.sound.play(key, { volume: 0.35 });
+    } catch (e) {
+      // non-fatal: a blocked/failed footstep must never interrupt movement
+    }
   }
 
   update() {
@@ -115,6 +155,17 @@ export class TownScene extends Phaser.Scene {
     const animKey = animKeyFor(this.facing, moving);
     if (this.player.anims.currentAnim?.key !== animKey) {
       this.player.play(animKey);
+    }
+
+    if (moving) {
+      if (this.time.now - this.lastStepAt >= FOOTSTEP_INTERVAL_MS) {
+        this.lastStepAt = this.time.now;
+        this.playFootstep();
+      }
+    } else {
+      // Reset so the next walk cycle starts with an immediate step instead
+      // of waiting out whatever was left of the interval from before.
+      this.lastStepAt = 0;
     }
 
     this.activeInteraction = this.resolveInteraction();

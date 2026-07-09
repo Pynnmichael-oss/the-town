@@ -9,6 +9,8 @@ export class TitleScene extends Phaser.Scene {
   create() {
     this.cameras.main.setBackgroundColor('#0a0a0a');
 
+    this.createStarfield();
+
     this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 60, 'THE TOWN', {
         fontFamily: 'monospace',
@@ -47,5 +49,30 @@ export class TitleScene extends Phaser.Scene {
     );
 
     this.input.keyboard.addKey('E').on('down', () => openDirectory());
+  }
+
+  // Idle background flicker while sitting on the title screen - plain
+  // Graphics circles + alpha tweens, no sprite/atlas dependency so it never
+  // interacts with the art-loading seam in PreloadScene.
+  createStarfield() {
+    const STAR_COUNT = 45;
+    for (let i = 0; i < STAR_COUNT; i++) {
+      const star = this.add.circle(
+        Phaser.Math.Between(0, GAME_WIDTH),
+        Phaser.Math.Between(0, GAME_HEIGHT),
+        Phaser.Math.FloatBetween(1, 2),
+        0xffffff,
+        Phaser.Math.FloatBetween(0.3, 0.9)
+      );
+      this.tweens.add({
+        targets: star,
+        alpha: Phaser.Math.FloatBetween(0.05, 0.2),
+        duration: Phaser.Math.Between(800, 2200),
+        delay: Phaser.Math.Between(0, 2000),
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+    }
   }
 }
