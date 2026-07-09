@@ -1,3 +1,4 @@
+import { BUILDINGS } from '../config.js';
 import { toggleDirectory, isDirectoryOpen } from '../directory.js';
 
 const PLAYER_SPEED = 160;
@@ -23,6 +24,14 @@ export class TownScene extends Phaser.Scene {
     const spawnPoint = map.findObject('Objects', (obj) => obj.name === 'PlayerSpawn');
     const signpostPoint = map.findObject('Objects', (obj) => obj.name === 'Signpost');
 
+    // Trigger zone name must match a key in BUILDINGS (src/config.js) - no URLs
+    // are hardcoded here, they're read straight from that map.
+    this.triggerZones = map.getObjectLayer('Triggers').objects.map((obj) => ({
+      name: obj.name,
+      rect: new Phaser.Geom.Rectangle(obj.x, obj.y, obj.width, obj.height),
+      building: BUILDINGS[obj.name],
+    }));
+
     this.signpost = this.add.image(signpostPoint.x, signpostPoint.y, 'signpost');
 
     this.player = this.physics.add.sprite(spawnPoint.x, spawnPoint.y, 'player');
@@ -37,7 +46,7 @@ export class TownScene extends Phaser.Scene {
     this.wasd = this.input.keyboard.addKeys('W,A,S,D,E');
 
     this.promptText = this.add
-      .text(0, 0, 'Press E for Town Directory', {
+      .text(0, 0, '', {
         fontFamily: 'monospace',
         fontSize: '14px',
         color: '#f0f0f0',
@@ -48,8 +57,15 @@ export class TownScene extends Phaser.Scene {
       .setScrollFactor(1)
       .setVisible(false);
 
+    this.activeInteraction = null;
+
     this.wasd.E.on('down', () => {
-      if (this.nearSignpost) toggleDirectory();
+      if (!this.activeInteraction) return;
+      if (this.activeInteraction.type === 'building') {
+        window.open(this.activeInteraction.url, '_blank');
+      } else if (this.activeInteraction.type === 'signpost') {
+        toggleDirectory();
+      }
     });
   }
 
@@ -68,16 +84,39 @@ export class TownScene extends Phaser.Scene {
     velocity.normalize().scale(PLAYER_SPEED);
     this.player.setVelocity(velocity.x, velocity.y);
 
+    this.activeInteraction = this.resolveInteraction();
+
+    this.promptText.setVisible(!!this.activeInteraction);
+    if (this.activeInteraction) {
+      this.promptText.setText(this.activeInteraction.label);
+      this.promptText.setPosition(this.player.x, this.player.y - 32);
+    }
+  }
+
+  // Building zones take priority over the signpost's radius so only one
+  // prompt is ever shown, even if a player could stand near both at once.
+  resolveInteraction() {
+    const zone = this.triggerZones.find((z) =>
+      Phaser.Geom.Rectangle.Contains(z.rect, this.player.x, this.player.y)
+    );
+    if (zone) {
+      return {
+        type: 'building',
+        label: `Press E to visit ${zone.building.name}`,
+        url: zone.building.url,
+      };
+    }
+
     const distance = Phaser.Math.Distance.Between(
       this.player.x,
       this.player.y,
       this.signpost.x,
       this.signpost.y
     );
-    this.nearSignpost = distance <= SIGNPOST_RADIUS;
-    this.promptText.setVisible(this.nearSignpost);
-    if (this.nearSignpost) {
-      this.promptText.setPosition(this.player.x, this.player.y - 32);
+    if (distance <= SIGNPOST_RADIUS) {
+      return { type: 'signpost', label: 'Press E for Town Directory' };
     }
+
+    return null;
   }
 }
