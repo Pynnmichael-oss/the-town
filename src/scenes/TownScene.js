@@ -1,5 +1,6 @@
 import { BUILDINGS } from '../config.js';
 import { toggleDirectory, isDirectoryOpen } from '../directory.js';
+import { animKeyFor } from '../anims.js';
 
 const PLAYER_SPEED = 160;
 const SIGNPOST_RADIUS = 48;
@@ -49,6 +50,9 @@ export class TownScene extends Phaser.Scene {
     this.player = this.physics.add.sprite(spawnPoint.x, spawnPoint.y, 'player');
     this.player.setCollideWorldBounds(true);
 
+    this.facing = 'down';
+    this.player.play(animKeyFor(this.facing, false));
+
     this.physics.add.collider(this.player, groundLayer);
     this.physics.add.collider(this.player, buildingsLayer);
 
@@ -93,8 +97,25 @@ export class TownScene extends Phaser.Scene {
     if (this.cursors.up.isDown || this.wasd.W.isDown) velocity.y -= 1;
     if (this.cursors.down.isDown || this.wasd.S.isDown) velocity.y += 1;
 
+    const moving = velocity.x !== 0 || velocity.y !== 0;
+    if (moving) {
+      this.facing =
+        Math.abs(velocity.x) > Math.abs(velocity.y)
+          ? velocity.x > 0
+            ? 'right'
+            : 'left'
+          : velocity.y > 0
+            ? 'down'
+            : 'up';
+    }
+
     velocity.normalize().scale(PLAYER_SPEED);
     this.player.setVelocity(velocity.x, velocity.y);
+
+    const animKey = animKeyFor(this.facing, moving);
+    if (this.player.anims.currentAnim?.key !== animKey) {
+      this.player.play(animKey);
+    }
 
     this.activeInteraction = this.resolveInteraction();
 

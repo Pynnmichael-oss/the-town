@@ -1,4 +1,8 @@
 import { TILE_SIZE, BUILDING_SPRITE_KEYS } from '../config.js';
+import { createPlayerAnimations } from '../anims.js';
+
+const SHEET_COLS = 5;
+const SHEET_ROWS = 4;
 
 // Real sprites (see assets/higgsfield-spec.md) drop into assets/sprites/ with
 // no code change: this scene requests each expected file, and anything that
@@ -32,11 +36,16 @@ export class PreloadScene extends Phaser.Scene {
 
   create() {
     if (this.failedKeys.has('player')) {
-      this.generateSquareTexture('player', 0x7fd1ff, TILE_SIZE);
+      this.generateCharacterSheetTexture('player');
     }
     if (this.failedKeys.has('signpost')) {
       this.generateSquareTexture('signpost', 0xf0d878, TILE_SIZE);
     }
+
+    // Registered here so both the real spritesheet and the placeholder sheet
+    // (below) work identically - animation setup never depends on whether
+    // the real file loaded, only on 'player' having 20 valid frames.
+    createPlayerAnimations(this);
 
     this.scene.start('Title');
   }
@@ -49,5 +58,36 @@ export class PreloadScene extends Phaser.Scene {
     g.strokeRect(0, 0, size, size);
     g.generateTexture(key, size, size);
     g.destroy();
+  }
+
+  // Same 5x4 grid as the real character sheet (assets/higgsfield-spec.md),
+  // every cell an identical flat square - looks static, but slices into 20
+  // real named frames so walk/idle animations have something valid to play.
+  generateCharacterSheetTexture(key) {
+    const frameWidth = TILE_SIZE;
+    const frameHeight = TILE_SIZE;
+    const sheetWidth = frameWidth * SHEET_COLS;
+    const sheetHeight = frameHeight * SHEET_ROWS;
+
+    const g = this.make.graphics({ add: false });
+    g.fillStyle(0x7fd1ff, 1);
+    g.fillRect(0, 0, sheetWidth, sheetHeight);
+    g.lineStyle(2, 0x000000, 0.3);
+    for (let row = 0; row < SHEET_ROWS; row++) {
+      for (let col = 0; col < SHEET_COLS; col++) {
+        g.strokeRect(col * frameWidth, row * frameHeight, frameWidth, frameHeight);
+      }
+    }
+    g.generateTexture(key, sheetWidth, sheetHeight);
+    g.destroy();
+
+    const texture = this.textures.get(key);
+    let frameIndex = 0;
+    for (let row = 0; row < SHEET_ROWS; row++) {
+      for (let col = 0; col < SHEET_COLS; col++) {
+        texture.add(frameIndex, 0, col * frameWidth, row * frameHeight, frameWidth, frameHeight);
+        frameIndex++;
+      }
+    }
   }
 }

@@ -57,8 +57,32 @@ columns x 4 rows, zero padding/margin between cells — Phaser loads this with
 
 Walk frames 1-4 are a standard contact-passing-contact-passing cycle. Frame
 index within the sheet = `row * 5 + col` (e.g. Right-Walk2 = row2,col2 = index
-12) — TownScene doesn't wire up animations yet (that's a later pass), but the
-frame indices should follow this formula so it's a drop-in when it does.
+12).
+
+### Animation key contract
+
+`src/anims.js` registers 8 Phaser animations against the `player` texture,
+built directly from the row/col table above. This is the exact contract the
+real sprite sheet has to match — row order especially, since swapping two
+rows silently makes the character face the wrong way with no error:
+
+| Anim key | Row | Frames (row*5+col) | frameRate | repeat |
+|---|---|---|---|---|
+| `idle-down` | 0 | 0 | 1 | -1 |
+| `walk-down` | 0 | 1-4 | 8 | -1 |
+| `idle-left` | 1 | 5 | 1 | -1 |
+| `walk-left` | 1 | 6-9 | 8 | -1 |
+| `idle-right` | 2 | 10 | 1 | -1 |
+| `walk-right` | 2 | 11-14 | 8 | -1 |
+| `idle-up` | 3 | 15 | 1 | -1 |
+| `walk-up` | 3 | 16-19 | 8 | -1 |
+
+These are registered once in `PreloadScene.create()` against whatever texture
+ends up at the `player` key — the real spritesheet if it loaded, or a
+generated 20-frame placeholder sheet (each frame identical) if it didn't.
+Either way the animations exist and play; a missing `player.png` degrades the
+*visuals* to a static-looking placeholder, not the animation *state machine*.
+TownScene picks the key via `animKeyFor(direction, moving)` in the same file.
 
 **Base prompt** (before the shared style suffix):
 
@@ -161,9 +185,11 @@ for this spec.
 
 `PreloadScene` tries to load every file in this spec from `assets/sprites/`
 first. Missing files fail silently (no console errors) and fall back to the
-current placeholder — the flat generated square for the player, and the
-existing flat-color tile fill for buildings (no code change needed either
-way). Drop a finished PNG at the path above and it's picked up automatically
-next load; nothing else in the codebase needs to change. See the `SPRITE_KEYS`
-manifest in `PreloadScene.js` and the footprint loop in `TownScene.js` for the
-mechanism.
+current placeholder — a generated 20-frame sheet (every frame an identical
+flat square) for the player, so the animation system in `src/anims.js` has
+real frames to play even with no art; and the existing flat-color tile fill
+for buildings (no code change needed either way). Drop a finished PNG at the
+path above and it's picked up automatically next load; nothing else in the
+codebase needs to change. See `BUILDING_SPRITE_KEYS` in `src/config.js`, the
+loader in `PreloadScene.js`, the animation defs in `src/anims.js`, and the
+footprint loop in `TownScene.js` for the mechanism.
