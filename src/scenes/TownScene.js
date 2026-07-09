@@ -1,8 +1,5 @@
-import { TILE_SIZE } from '../config.js';
 import { toggleDirectory, isDirectoryOpen } from '../directory.js';
 
-const WORLD_TILES_X = 40;
-const WORLD_TILES_Y = 30;
 const PLAYER_SPEED = 160;
 const SIGNPOST_RADIUS = 48;
 
@@ -12,24 +9,28 @@ export class TownScene extends Phaser.Scene {
   }
 
   create() {
-    const worldWidth = WORLD_TILES_X * TILE_SIZE;
-    const worldHeight = WORLD_TILES_Y * TILE_SIZE;
+    const map = this.make.tilemap({ key: 'town' });
+    const tileset = map.addTilesetImage('rpg-urban', 'rpg-urban-tileset');
+    const groundLayer = map.createLayer('Ground', tileset, 0, 0);
+    const buildingsLayer = map.createLayer('Buildings', tileset, 0, 0);
 
-    // Placeholder ground until the Tiled map (build step 1) replaces this.
-    for (let x = 0; x < WORLD_TILES_X; x++) {
-      for (let y = 0; y < WORLD_TILES_Y; y++) {
-        this.add.image(x * TILE_SIZE, y * TILE_SIZE, 'ground').setOrigin(0);
-      }
-    }
+    groundLayer.setCollisionByProperty({ collides: true });
+    buildingsLayer.setCollisionByProperty({ collides: true });
 
-    this.physics.world.setBounds(0, 0, worldWidth, worldHeight);
+    this.physics.world.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
+    this.cameras.main.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
 
-    this.signpost = this.add.image(worldWidth / 2, worldHeight / 2, 'signpost');
+    const spawnPoint = map.findObject('Objects', (obj) => obj.name === 'PlayerSpawn');
+    const signpostPoint = map.findObject('Objects', (obj) => obj.name === 'Signpost');
 
-    this.player = this.physics.add.sprite(worldWidth / 2, worldHeight / 2 + 100, 'player');
+    this.signpost = this.add.image(signpostPoint.x, signpostPoint.y, 'signpost');
+
+    this.player = this.physics.add.sprite(spawnPoint.x, spawnPoint.y, 'player');
     this.player.setCollideWorldBounds(true);
 
-    this.cameras.main.setBounds(0, 0, worldWidth, worldHeight);
+    this.physics.add.collider(this.player, groundLayer);
+    this.physics.add.collider(this.player, buildingsLayer);
+
     this.cameras.main.startFollow(this.player, true);
 
     this.cursors = this.input.keyboard.createCursorKeys();

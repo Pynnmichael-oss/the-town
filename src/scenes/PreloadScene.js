@@ -1,15 +1,19 @@
 import { TILE_SIZE } from '../config.js';
 
-// Generates flat-color placeholder textures so the scaffold is playable before
-// the real Kenney tileset / Higgsfield sprites are dropped into assets/.
+// Loads the real Tiled map/tileset and generates flat-color placeholder
+// textures for the player and signpost until Higgsfield sprites replace them.
 export class PreloadScene extends Phaser.Scene {
   constructor() {
     super('Preload');
   }
 
+  preload() {
+    this.load.image('rpg-urban-tileset', 'assets/tilesets/rpg-urban-tileset.png');
+    this.load.tilemapTiledJSON('town', 'assets/maps/town.json');
+  }
+
   create() {
     this.generateSquareTexture('player', 0x7fd1ff, TILE_SIZE);
-    this.generateSquareTexture('ground', 0x2f5233, TILE_SIZE);
     this.generateSquareTexture('signpost', 0xf0d878, TILE_SIZE);
 
     this.scene.start('Title');
