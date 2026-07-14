@@ -1,12 +1,15 @@
-Tileset: [RPG Urban Pack](https://kenney.nl/assets/rpg-urban-pack) by Kenney (kenney.nl), CC0 1.0 — placeholder art, swapped for custom Higgsfield sprites later.
+Tileset: [RPG Urban Pack](https://kenney.nl/assets/rpg-urban-pack) by Kenney (kenney.nl), CC0 1.0 — the full ground layer (grass/paths/plaza/water autotiling) and all set dressing (trees, lamps, benches, fences, fountain) in the generated `assets/maps/town.json`.
 
 ## Custom sprites (Higgsfield)
 
-Character (`assets/sprites/player.png`) and all 7 building sprites
+Character (`assets/sprites/player.png`), the town signpost
+(`assets/sprites/signpost.png`), and all 7 building sprites
 (`assets/sprites/buildings/*.png`) generated with
 [Higgsfield](https://higgsfield.ai) using the **Nano Banana Pro**
 (`nano_banana_2`) image model, via the `higgsfield` CLI, per the prompts and
-style spec in `assets/higgsfield-spec.md`.
+style spec in `assets/higgsfield-spec.md` (v2 environment-overhaul pass,
+July 2026: buildings regenerated at 3-5x player scale with organic
+silhouettes and contact shadows; batch scripts in `scripts/gen_*.sh`).
 
 Generation workflow: each asset generated on a solid chroma-key magenta
 (#ff00ff) backdrop (Nano Banana Pro doesn't support native alpha output),
