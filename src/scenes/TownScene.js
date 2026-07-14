@@ -24,13 +24,28 @@ export class TownScene extends Phaser.Scene {
     // Real building art (assets/higgsfield-spec.md) drops in as
     // assets/sprites/buildings/<name>.png with no scene-code change: this
     // only adds an overlay when PreloadScene actually loaded that texture,
-    // so a missing file just leaves the flat-color tile fill underneath
-    // showing through unchanged - collision stays on buildingsLayer either way.
+    // so a missing file just leaves the ground tiles visible. Sprites are
+    // anchored bottom-centered at native size (the PNG is generated to the
+    // exact footprint size - never scale it here), and every footprint gets
+    // a static collision body whether or not its art loaded, so buildings
+    // are solid even in the fallback path.
+    this.buildingSolids = [];
     map.getObjectLayer('BuildingFootprints').objects.forEach((obj) => {
+      const solid = this.add.zone(
+        obj.x + obj.width / 2,
+        obj.y + obj.height / 2,
+        obj.width,
+        obj.height
+      );
+      this.physics.add.existing(solid, true);
+      this.buildingSolids.push(solid);
+
       const textureKey = `building_${obj.name}`;
       if (!this.textures.exists(textureKey)) return;
-      const image = this.add.image(obj.x + obj.width / 2, obj.y + obj.height / 2, textureKey);
-      image.setDisplaySize(obj.width, obj.height);
+      this.add
+        .image(obj.x + obj.width / 2, obj.y + obj.height, textureKey)
+        .setOrigin(0.5, 1)
+        .setDepth(obj.y + obj.height);
     });
 
     this.physics.world.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
@@ -47,32 +62,47 @@ export class TownScene extends Phaser.Scene {
       building: BUILDINGS[obj.name],
     }));
 
-    this.signpost = this.add.image(signpostPoint.x, signpostPoint.y, 'signpost');
+    // Bottom-anchored so the point in the map marks where the post meets the
+    // ground; depth keyed off that same point so the player walks in front
+    // of/behind it correctly.
+    this.signpost = this.add
+      .image(signpostPoint.x, signpostPoint.y, 'signpost')
+      .setOrigin(0.5, 1)
+      .setDepth(signpostPoint.y);
 
     this.player = this.physics.add.sprite(spawnPoint.x, spawnPoint.y, 'player');
     this.player.setCollideWorldBounds(true);
+    // Feet-sized body: the sprite frame is 32px but the walkable world is
+    // 16px tiles, so a full-frame body snags on every doorway and tree.
+    this.player.body.setSize(18, 14).setOffset(7, 18);
 
     this.facing = 'down';
     this.player.play(animKeyFor(this.facing, false));
 
     this.physics.add.collider(this.player, groundLayer);
     this.physics.add.collider(this.player, buildingsLayer);
+    this.buildingSolids.forEach((solid) => this.physics.add.collider(this.player, solid));
 
     this.cameras.main.startFollow(this.player, true);
+    // 2x zoom: pixelArt + roundPixels (set in main.js) keep it crisp.
+    this.cameras.main.setZoom(2);
 
     this.cursors = this.input.keyboard.createCursorKeys();
     this.wasd = this.input.keyboard.addKeys('W,A,S,D,E');
 
+    // 10px because the camera runs at 2x zoom - renders at an effective
+    // 20px on screen; always on top of depth-sorted buildings.
     this.promptText = this.add
       .text(0, 0, '', {
         fontFamily: 'monospace',
-        fontSize: '14px',
+        fontSize: '10px',
         color: '#f0f0f0',
         backgroundColor: '#000000',
-        padding: { x: 6, y: 4 },
+        padding: { x: 5, y: 3 },
       })
       .setOrigin(0.5)
       .setScrollFactor(1)
+      .setDepth(10000)
       .setVisible(false);
 
     this.activeInteraction = null;
@@ -156,6 +186,10 @@ export class TownScene extends Phaser.Scene {
     if (this.player.anims.currentAnim?.key !== animKey) {
       this.player.play(animKey);
     }
+
+    // Depth-sort against the bottom-anchored building sprites/signpost:
+    // sprite feet vs. their baselines.
+    this.player.setDepth(this.player.y + 16);
 
     if (moving) {
       if (this.time.now - this.lastStepAt >= FOOTSTEP_INTERVAL_MS) {
