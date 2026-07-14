@@ -3,8 +3,10 @@ Tileset: [RPG Urban Pack](https://kenney.nl/assets/rpg-urban-pack) by Kenney (ke
 ## Custom sprites (Higgsfield)
 
 Character (`assets/sprites/player.png`), the town signpost
-(`assets/sprites/signpost.png`), and all 7 building sprites
-(`assets/sprites/buildings/*.png`) generated with
+(`assets/sprites/signpost.png`), the stray cat
+(`assets/sprites/cat.png` — one 4-pose strip generation, sliced and
+bbox-normalized into 32x32 frames: idle / walk x2 / sit), and all 7
+building sprites (`assets/sprites/buildings/*.png`) generated with
 [Higgsfield](https://higgsfield.ai) using the **Nano Banana Pro**
 (`nano_banana_2`) image model, via the `higgsfield` CLI, per the prompts and
 style spec in `assets/higgsfield-spec.md` (v2 environment-overhaul pass,
@@ -32,3 +34,11 @@ mirror of the left-facing row rather than an independent generation.
 - Ambient town loop (`assets/audio/ambient-town.mp3`): trimmed/faded excerpt
   of "Forest Ambience" from [CC0 Background Ambience](https://opengameart.org/content/cc0-background-ambience)
   by FGResources, OpenGameArt.org, CC0.
+- Background music (`assets/audio/music-town.ogg`): "rpgchip03_town" from
+  [15 Melodic RPG Chiptunes](https://opengameart.org/content/15-melodic-rpg-chiptunes)
+  by Aureolus_Omicron, OpenGameArt.org, CC0. Loopable as published; used
+  unmodified.
+- Fountain loop (`assets/audio/fountain-loop.ogg`): "loop_water_02" from
+  [40 CC0 water / splash / slime SFX](https://opengameart.org/content/40-cc0-water-splash-slime-sfx)
+  by rubberduck, OpenGameArt.org, CC0. Used unmodified; volume is
+  distance-faded in code.

@@ -28,6 +28,12 @@ export class PreloadScene extends Phaser.Scene {
       frameHeight: TILE_SIZE,
     });
     this.load.image('signpost', 'assets/sprites/signpost.png');
+    // The stray cat gets no placeholder: TownScene simply skips spawning it
+    // if the texture never arrived (same seam as the building sprites).
+    this.load.spritesheet('cat', 'assets/sprites/cat.png', {
+      frameWidth: TILE_SIZE,
+      frameHeight: TILE_SIZE,
+    });
 
     BUILDING_SPRITE_KEYS.forEach((key) => {
       this.load.image(`building_${key}`, `assets/sprites/buildings/${key}.png`);
@@ -40,6 +46,8 @@ export class PreloadScene extends Phaser.Scene {
     this.load.audio('footstep-1', 'assets/audio/footstep-1.ogg');
     this.load.audio('footstep-2', 'assets/audio/footstep-2.ogg');
     this.load.audio('ambient-town', 'assets/audio/ambient-town.mp3');
+    this.load.audio('music-town', 'assets/audio/music-town.ogg');
+    this.load.audio('fountain-loop', 'assets/audio/fountain-loop.ogg');
   }
 
   create() {

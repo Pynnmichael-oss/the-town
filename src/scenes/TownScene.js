@@ -1,4 +1,4 @@
-import { BUILDINGS } from '../config.js';
+import { BUILDINGS, FLAVOR_PROPS } from '../config.js';
 import { toggleDirectory, isDirectoryOpen } from '../directory.js';
 import { animKeyFor } from '../anims.js';
 
@@ -6,6 +6,24 @@ const PLAYER_SPEED = 160;
 const SIGNPOST_RADIUS = 48;
 const FOOTSTEP_INTERVAL_MS = 260;
 const FOOTSTEP_KEYS = ['footstep-1', 'footstep-2'];
+
+// Volume hierarchy (loudest to quietest): music > ambient > footsteps >
+// fountain. Footsteps are felt-not-heard: ~18% of the old 0.35, with
+// per-step pitch/volume jitter so the two alternating samples don't
+// sound mechanical.
+const MUSIC_VOLUME = 0.16;
+const AMBIENT_VOLUME = 0.07;
+const FOOTSTEP_VOLUME = 0.06;
+const FOUNTAIN_VOLUME = 0.05;
+const FOUNTAIN_SFX_NEAR = 32; // px: full (tiny) volume inside this
+const FOUNTAIN_SFX_FAR = 112; // px: silent beyond this (~3 tiles of fade)
+
+const CAT_RADIUS = 40;
+const CAT_SPEED = 28;
+// The cat's patrol is bounded to the walkable ring of the town square —
+// waypoints stay inside this px rect, and physics colliders (fountain
+// water, benches, lamps) handle anything inside it.
+const CAT_BOUNDS = { x0: 560, y0: 448, x1: 736, y1: 592 };
 
 export class TownScene extends Phaser.Scene {
   constructor() {
@@ -53,6 +71,7 @@ export class TownScene extends Phaser.Scene {
 
     const spawnPoint = map.findObject('Objects', (obj) => obj.name === 'PlayerSpawn');
     const signpostPoint = map.findObject('Objects', (obj) => obj.name === 'Signpost');
+    const fountainPoint = map.findObject('Objects', (obj) => obj.name === 'Fountain');
 
     // Trigger zone name must match a key in BUILDINGS (src/config.js) - no URLs
     // are hardcoded here, they're read straight from that map.
@@ -83,6 +102,9 @@ export class TownScene extends Phaser.Scene {
     this.physics.add.collider(this.player, buildingsLayer);
     this.buildingSolids.forEach((solid) => this.physics.add.collider(this.player, solid));
 
+    this.createCat(groundLayer, buildingsLayer);
+    this.createFountain(fountainPoint);
+
     this.cameras.main.startFollow(this.player, true);
     // 2x zoom: pixelArt + roundPixels (set in main.js) keep it crisp.
     this.cameras.main.setZoom(2);
@@ -105,14 +127,40 @@ export class TownScene extends Phaser.Scene {
       .setDepth(10000)
       .setVisible(false);
 
+    this.flavorZones = FLAVOR_PROPS.map((p) => ({
+      rect: new Phaser.Geom.Rectangle(p.x, p.y, p.w, p.h),
+      text: p.text,
+    }));
+
+    // One reusable bubble for flavor text / the cat's meow — same styling
+    // family as promptText, auto-dismisses after a beat.
+    this.bubbleText = this.add
+      .text(0, 0, '', {
+        fontFamily: 'monospace',
+        fontSize: '10px',
+        color: '#1d1d28',
+        backgroundColor: '#f0f0e0',
+        padding: { x: 5, y: 3 },
+        wordWrap: { width: 180 },
+        align: 'center',
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(10001)
+      .setVisible(false);
+
     this.activeInteraction = null;
 
     this.wasd.E.on('down', () => {
       if (!this.activeInteraction) return;
-      if (this.activeInteraction.type === 'building') {
-        window.open(this.activeInteraction.url, '_blank');
-      } else if (this.activeInteraction.type === 'signpost') {
+      const it = this.activeInteraction;
+      if (it.type === 'building') {
+        window.open(it.url, '_blank');
+      } else if (it.type === 'signpost') {
         toggleDirectory();
+      } else if (it.type === 'cat') {
+        this.showBubble('Meow.', this.cat.x, this.cat.y - 18);
+      } else if (it.type === 'flavor') {
+        this.showBubble(it.text, this.player.x, this.player.y - 24);
       }
     });
 
@@ -120,7 +168,107 @@ export class TownScene extends Phaser.Scene {
     this.stepIndex = 0;
     this.lastStepAt = 0;
 
-    this.startAmbientSound();
+    this.startAudio();
+  }
+
+  showBubble(text, x, y) {
+    if (this.bubbleTimer) this.bubbleTimer.remove();
+    if (this.bubbleTween) this.bubbleTween.stop();
+    this.bubbleText.setText(text).setPosition(x, y).setAlpha(1).setVisible(true);
+    this.bubbleTimer = this.time.delayedCall(2200, () => {
+      this.bubbleTween = this.tweens.add({
+        targets: this.bubbleText,
+        alpha: 0,
+        duration: 300,
+        onComplete: () => this.bubbleText.setVisible(false),
+      });
+    });
+  }
+
+  // Lazy plaza patrol: pause -> amble to a random waypoint inside
+  // CAT_BOUNDS -> pause or sit -> repeat. Colliders keep it out of the
+  // fountain and off the furniture; a timeout re-rolls the waypoint if it
+  // gets pinned against something.
+  createCat(groundLayer, buildingsLayer) {
+    if (!this.textures.exists('cat')) return;
+
+    ['cat-idle', 'cat-walk', 'cat-sit'].forEach((key) => {
+      if (this.anims.exists(key)) return;
+      const frames = { 'cat-idle': [0], 'cat-walk': [1, 2], 'cat-sit': [3] }[key];
+      this.anims.create({
+        key,
+        frames: frames.map((frame) => ({ key: 'cat', frame })),
+        frameRate: 5,
+        repeat: -1,
+      });
+    });
+
+    this.cat = this.physics.add.sprite(648, 520, 'cat');
+    this.cat.body.setSize(18, 10).setOffset(7, 20);
+    this.cat.play('cat-idle');
+    this.physics.add.collider(this.cat, groundLayer);
+    this.physics.add.collider(this.cat, buildingsLayer);
+    this.buildingSolids.forEach((solid) => this.physics.add.collider(this.cat, solid));
+
+    this.catState = 'pause';
+    this.catUntil = 0;
+    this.catTarget = null;
+  }
+
+  updateCat(now) {
+    if (!this.cat) return;
+    this.cat.setDepth(this.cat.y + 12);
+
+    if (this.catState === 'walk') {
+      const done =
+        Phaser.Math.Distance.Between(this.cat.x, this.cat.y, this.catTarget.x, this.catTarget.y) < 6;
+      if (done || now > this.catUntil) {
+        this.cat.setVelocity(0);
+        const sitting = Math.random() < 0.5;
+        this.catState = sitting ? 'sit' : 'pause';
+        this.catUntil = now + Phaser.Math.Between(1800, 4500);
+        this.cat.play(sitting ? 'cat-sit' : 'cat-idle');
+      } else {
+        // colliders can deflect it, so keep re-aiming at the waypoint
+        this.physics.moveTo(this.cat, this.catTarget.x, this.catTarget.y, CAT_SPEED);
+        this.cat.setFlipX(this.cat.body.velocity.x < 0);
+      }
+    } else if (now > this.catUntil) {
+      this.catTarget = {
+        x: Phaser.Math.Between(CAT_BOUNDS.x0, CAT_BOUNDS.x1),
+        y: Phaser.Math.Between(CAT_BOUNDS.y0, CAT_BOUNDS.y1),
+      };
+      this.catState = 'walk';
+      this.catUntil = now + 8000; // give up on unreachable waypoints
+      this.cat.play('cat-walk');
+    }
+  }
+
+  createFountain(fountainPoint) {
+    if (!fountainPoint) return;
+    this.fountainPoint = fountainPoint;
+
+    // 2x2 white pixel, tinted per-particle toward pale blues.
+    if (!this.textures.exists('splash-px')) {
+      const g = this.make.graphics({ add: false });
+      g.fillStyle(0xffffff, 1);
+      g.fillRect(0, 0, 2, 2);
+      g.generateTexture('splash-px', 2, 2);
+      g.destroy();
+    }
+    this.add
+      .particles(fountainPoint.x, fountainPoint.y - 8, 'splash-px', {
+        speedX: { min: -14, max: 14 },
+        speedY: { min: -34, max: -12 },
+        gravityY: 70,
+        lifespan: { min: 350, max: 700 },
+        frequency: 70,
+        quantity: 1,
+        alpha: { start: 0.9, end: 0 },
+        scale: { start: 1, end: 0.5 },
+        tint: [0xffffff, 0xcfeaff, 0x9fd8ff],
+      })
+      .setDepth(fountainPoint.y + 16);
   }
 
   // Autoplay policies (and headless/CI browsers) commonly block audio until
@@ -128,13 +276,27 @@ export class TownScene extends Phaser.Scene {
   // it must never stop the scene from loading or playing, so every audio
   // call in this scene is try/catch-wrapped and gated on the asset having
   // actually made it into the cache (see PreloadScene's failedKeys seam).
-  startAmbientSound() {
-    if (!this.cache.audio.exists('ambient-town')) return;
+  //
+  // Three loops, quiet-to-quieter: the chiptune town theme carries, the old
+  // nature ambience sits ducked underneath it as a bed, and the fountain
+  // loop starts silent — update() raises it only near the fountain.
+  startAudio() {
     const play = () => {
       try {
-        this.sound.add('ambient-town', { loop: true, volume: 0.25 }).play();
+        if (this.cache.audio.exists('music-town')) {
+          this.music = this.sound.add('music-town', { loop: true, volume: MUSIC_VOLUME });
+          this.music.play();
+        }
+        if (this.cache.audio.exists('ambient-town')) {
+          this.ambient = this.sound.add('ambient-town', { loop: true, volume: AMBIENT_VOLUME });
+          this.ambient.play();
+        }
+        if (this.cache.audio.exists('fountain-loop') && this.fountainPoint) {
+          this.fountainSound = this.sound.add('fountain-loop', { loop: true, volume: 0 });
+          this.fountainSound.play();
+        }
       } catch (e) {
-        // non-fatal: game continues silently without ambient sound
+        // non-fatal: game continues silently
       }
     };
     if (this.sound.locked) {
@@ -149,9 +311,31 @@ export class TownScene extends Phaser.Scene {
     const key = this.footstepKeys[this.stepIndex % this.footstepKeys.length];
     this.stepIndex++;
     try {
-      this.sound.play(key, { volume: 0.35 });
+      // ±8% pitch and ±10% volume per step keeps the two samples from
+      // reading as a mechanical A/B loop.
+      this.sound.play(key, {
+        volume: FOOTSTEP_VOLUME * Phaser.Math.FloatBetween(0.9, 1.1),
+        rate: Phaser.Math.FloatBetween(0.92, 1.08),
+      });
     } catch (e) {
       // non-fatal: a blocked/failed footstep must never interrupt movement
+    }
+  }
+
+  // Distance-faded fountain SFX: full FOUNTAIN_VOLUME inside NEAR px,
+  // silent past FAR px (~3 tiles of fade), beneath everything else.
+  updateFountainSound() {
+    if (!this.fountainSound) return;
+    const d = Phaser.Math.Distance.Between(
+      this.player.x, this.player.y, this.fountainPoint.x, this.fountainPoint.y
+    );
+    const t = Phaser.Math.Clamp(
+      (FOUNTAIN_SFX_FAR - d) / (FOUNTAIN_SFX_FAR - FOUNTAIN_SFX_NEAR), 0, 1
+    );
+    try {
+      this.fountainSound.setVolume(FOUNTAIN_VOLUME * t);
+    } catch (e) {
+      // non-fatal
     }
   }
 
@@ -191,6 +375,9 @@ export class TownScene extends Phaser.Scene {
     // sprite feet vs. their baselines.
     this.player.setDepth(this.player.y + 16);
 
+    this.updateCat(this.time.now);
+    this.updateFountainSound();
+
     if (moving) {
       if (this.time.now - this.lastStepAt >= FOOTSTEP_INTERVAL_MS) {
         this.lastStepAt = this.time.now;
@@ -211,8 +398,9 @@ export class TownScene extends Phaser.Scene {
     }
   }
 
-  // Building zones take priority over the signpost's radius so only one
-  // prompt is ever shown, even if a player could stand near both at once.
+  // One prompt at a time, strict priority: building portals, then the
+  // signpost directory, then the cat, then flavor props. Overlapping zones
+  // therefore never shadow a redirect or the directory.
   resolveInteraction() {
     const zone = this.triggerZones.find((z) =>
       Phaser.Geom.Rectangle.Contains(z.rect, this.player.x, this.player.y)
@@ -233,6 +421,21 @@ export class TownScene extends Phaser.Scene {
     );
     if (distance <= SIGNPOST_RADIUS) {
       return { type: 'signpost', label: 'Press E for Town Directory' };
+    }
+
+    if (
+      this.cat &&
+      Phaser.Math.Distance.Between(this.player.x, this.player.y, this.cat.x, this.cat.y) <=
+        CAT_RADIUS
+    ) {
+      return { type: 'cat', label: 'Press E to greet the cat' };
+    }
+
+    const flavor = this.flavorZones.find((z) =>
+      Phaser.Geom.Rectangle.Contains(z.rect, this.player.x, this.player.y)
+    );
+    if (flavor) {
+      return { type: 'flavor', label: 'Press E to look', text: flavor.text };
     }
 
     return null;

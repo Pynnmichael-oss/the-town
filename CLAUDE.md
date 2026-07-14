@@ -29,6 +29,8 @@ Then open `http://localhost:8000/`.
 
 **Camera runs at 2x zoom** (`pixelArt` + `roundPixels` in `main.js` keep it crisp), so the 800x600 canvas shows a 400x300 world slice; in-world text sizes are set at half the intended on-screen size (see `promptText`).
 
+**Interactions resolve through one strict priority chain** (`TownScene.resolveInteraction`): building trigger > signpost > stray cat > flavor prop — exactly one prompt at a time. Flavor props are a data map (`FLAVOR_PROPS` in `src/config.js`, px rects + one-liner text); adding one is a single entry, no scene code. The cat, music/ambient/fountain loops, and every other audio path ride the same graceful-failure seam as the art (missing file = feature silently absent, never an error). Volume hierarchy is pinned by constants at the top of `TownScene.js`: music > ambient > footsteps > fountain.
+
 **The `BUILDINGS` registry is the single source of truth for what each building links to** (`src/config.js`). Trigger-zone object *names* in the Tiled map must exactly match keys in `BUILDINGS`; `TownScene` looks up `BUILDINGS[obj.name]` with no other indirection. Adding a new building/portal means: add a `BUILDINGS` entry (name + url), add the sprite key to `BUILDING_SPRITE_KEYS` if it needs custom art, and add matching `Triggers`/`BuildingFootprints` objects in the Tiled map.
 
 **Asset fallback seam (important, spans 3 files).** Real Higgsfield-generated art is optional at every point — a missing or 404'd sprite must never break the scene:

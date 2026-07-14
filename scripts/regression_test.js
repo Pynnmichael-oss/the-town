@@ -177,6 +177,102 @@ function check(name, ok, detail = '') {
   const dir2 = await page.evaluate(() => !document.getElementById('directory-overlay').hidden);
   check('directory closes on Esc', dir2 === false);
 
+  // ---- charm pass: cat, flavor props, prompt priority, audio hierarchy
+  const parkCat = (cx, cy) => page.evaluate(([x, y]) => {
+    const s = window.game.scene.getScene('Town');
+    if (!s.cat) return false;
+    s.cat.setVelocity(0);
+    s.catState = 'pause';
+    s.catUntil = s.time.now + 60000; // pin it for the rest of the run
+    s.cat.body.reset(x, y);
+    return true;
+  }, [cx, cy]);
+
+  const catExists = await page.evaluate(() => !!window.game.scene.getScene('Town').cat);
+  check('cat spawned', catExists);
+
+  if (catExists) {
+    await parkCat(600, 560);
+    await teleport(37.5, 35.6); // (600, 570): 10px from cat, 80px from signpost
+    await new Promise((r) => setTimeout(r, 150));
+    const catPrompt = await page.evaluate(() => {
+      const s = window.game.scene.getScene('Town');
+      return { type: s.activeInteraction?.type, text: s.promptText.text };
+    });
+    check('cat prompt (beats flavor, loses to signpost)', catPrompt.type === 'cat', JSON.stringify(catPrompt));
+    await page.keyboard.press('KeyE');
+    await new Promise((r) => setTimeout(r, 150));
+    const meow = await page.evaluate(() => {
+      const s = window.game.scene.getScene('Town');
+      return { visible: s.bubbleText.visible, text: s.bubbleText.text };
+    });
+    check('E near cat -> Meow bubble', meow.visible && meow.text === 'Meow.', JSON.stringify(meow));
+    await parkCat(710, 585); // out of the way of the remaining checks
+  }
+
+  // bench flavor + auto-dismiss
+  await teleport(37.5, 31.5); // (600, 504) inside bench-plaza-w zone
+  await new Promise((r) => setTimeout(r, 150));
+  const benchPrompt = await page.evaluate(() => {
+    const s = window.game.scene.getScene('Town');
+    return { type: s.activeInteraction?.type, text: s.activeInteraction?.text };
+  });
+  check('bench flavor prompt', benchPrompt.type === 'flavor' && benchPrompt.text === 'A nice place to sit.', JSON.stringify(benchPrompt));
+  await page.keyboard.press('KeyE');
+  await new Promise((r) => setTimeout(r, 200));
+  const bubble1 = await page.evaluate(() => {
+    const s = window.game.scene.getScene('Town');
+    return s.bubbleText.visible && s.bubbleText.text;
+  });
+  check('bench bubble shows', bubble1 === 'A nice place to sit.', String(bubble1));
+  await new Promise((r) => setTimeout(r, 2900));
+  const bubbleGone = await page.evaluate(() => window.game.scene.getScene('Town').bubbleText.visible);
+  check('bubble auto-dismisses ~2.5s', bubbleGone === false);
+
+  // priority boundary at the silo: between the doors = flavor, on a door = building
+  await teleport(38, 50); // (608, 800): the gap between the two door triggers
+  await new Promise((r) => setTimeout(r, 150));
+  const siloFlavor = await page.evaluate(() => window.game.scene.getScene('Town').activeInteraction?.type);
+  check('between silo doors -> flavor', siloFlavor === 'flavor', String(siloFlavor));
+  await teleport(35, 50); // (560, 800): inside terminal_dashboard trigger
+  await new Promise((r) => setTimeout(r, 150));
+  const siloDoor = await page.evaluate(() => window.game.scene.getScene('Town').activeInteraction?.type);
+  check('on silo door -> building wins over flavor', siloDoor === 'building', String(siloDoor));
+
+  // fountain: flavor text, particles, proximity-faded loop
+  await teleport(38.75, 32.5); // (620, 520) beside the basin
+  await new Promise((r) => setTimeout(r, 200));
+  const fountain = await page.evaluate(() => {
+    const s = window.game.scene.getScene('Town');
+    return {
+      type: s.activeInteraction?.type,
+      text: s.activeInteraction?.text,
+      splashTex: s.textures.exists('splash-px'),
+      vol: s.fountainSound ? s.fountainSound.volume : null,
+    };
+  });
+  check('fountain flavor prompt', fountain.type === 'flavor' && fountain.text === 'Make a wish.', JSON.stringify(fountain));
+  check('fountain particle texture exists', fountain.splashTex);
+  check('fountain SFX audible up close', fountain.vol === null || fountain.vol > 0.02, `vol=${fountain.vol}`);
+  await teleport(12, 12);
+  await new Promise((r) => setTimeout(r, 200));
+  const farVol = await page.evaluate(() => {
+    const s = window.game.scene.getScene('Town');
+    return s.fountainSound ? s.fountainSound.volume : null;
+  });
+  check('fountain SFX silent far away', farVol === null || farVol === 0, `vol=${farVol}`);
+
+  // audio hierarchy: music > ambient > fountain cap; footsteps subtle
+  const audio = await page.evaluate(() => {
+    const s = window.game.scene.getScene('Town');
+    return {
+      music: s.music ? { playing: s.music.isPlaying, vol: s.music.volume } : null,
+      ambient: s.ambient ? { playing: s.ambient.isPlaying, vol: s.ambient.volume } : null,
+    };
+  });
+  check('music playing at quiet volume', !!audio.music && audio.music.playing && audio.music.vol > 0.1 && audio.music.vol <= 0.2, JSON.stringify(audio.music));
+  check('ambient ducked under music', !!audio.ambient && audio.ambient.playing && audio.ambient.vol < audio.music.vol, JSON.stringify(audio.ambient));
+
   // ---- camera follows across a teleport
   await teleport(10, 45);
   await new Promise((r) => setTimeout(r, 400));
@@ -192,9 +288,50 @@ function check(name, ok, detail = '') {
     await new Promise((r) => setTimeout(r, 400));
     await page.screenshot({ path: path.join(SHOTDIR, `${district}.png`) });
   }
+  // hero shot: cat sitting by the fountain, particles running
+  if (catExists) {
+    await parkCat(612, 540);
+    await page.evaluate(() => {
+      const s = window.game.scene.getScene('Town');
+      s.catState = 'sit';
+      s.catUntil = s.time.now + 60000;
+      s.cat.play('cat-sit');
+    });
+  }
+  await teleport(41.5, 33.5);
+  await new Promise((r) => setTimeout(r, 600));
+  await page.screenshot({ path: path.join(SHOTDIR, 'plaza-charm.png') });
   console.log(`screenshots -> ${SHOTDIR}`);
 
   check('no page errors', pageErrors.length === 0, pageErrors.join(' | '));
+
+  // ---- graceful failure: every audio file 404s -> town still boots clean
+  const deadServer = http.createServer((req, res) => {
+    const url = req.url.split('?')[0];
+    if (url.startsWith('/assets/audio/')) { res.writeHead(404); res.end(); return; }
+    const file = path.join(ROOT, url === '/' ? 'index.html' : url);
+    fs.readFile(file, (err, data) => {
+      if (err) { res.writeHead(404); res.end(); return; }
+      res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
+      res.end(data);
+    });
+  });
+  await new Promise((r) => deadServer.listen(PORT + 1, r));
+  const page2 = await browser.newPage();
+  const errs2 = [];
+  page2.on('pageerror', (e) => errs2.push(String(e)));
+  await page2.goto(`http://127.0.0.1:${PORT + 1}/`, { waitUntil: 'networkidle0' });
+  await page2.waitForFunction(() => window.game && window.game.scene.isActive('Title'), { timeout: 15000 });
+  await page2.keyboard.press('Enter');
+  await page2.waitForFunction(() => window.game.scene.isActive('Town'), { timeout: 10000 });
+  await new Promise((r) => setTimeout(r, 600));
+  const noAudioState = await page2.evaluate(() => {
+    const s = window.game.scene.getScene('Town');
+    return { music: !!s.music, footsteps: s.footstepKeys.length, active: true };
+  });
+  check('no-audio boot: town runs, zero errors', errs2.length === 0 && noAudioState.active, errs2.join(' | '));
+  check('no-audio boot: seam left music/footsteps unset', !noAudioState.music && noAudioState.footsteps === 0, JSON.stringify(noAudioState));
+  deadServer.close();
 
   await browser.close();
   server.close();

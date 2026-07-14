@@ -102,6 +102,7 @@ TRIGGERS = {  # name -> (x0, y0, x1, y1) in tiles
 }
 SPAWN = (648, 568)      # px, plaza south of the fountain
 SIGNPOST = (680, 560)   # px, next to spawn — first thing a visitor meets
+FOUNTAIN = (640, 496)   # px, center of the 2x2 basin (anchors particles/SFX)
 
 # --------------------------------------------------------------- autotile
 def material_at(x, y, m):
@@ -279,6 +280,7 @@ objects_layer = {
     'opacity': 1, 'x': 0, 'y': 0, 'objects': [
         obj(next(oid), 'PlayerSpawn', *SPAWN, point=True),
         obj(next(oid), 'Signpost', *SIGNPOST, point=True),
+        obj(next(oid), 'Fountain', *FOUNTAIN, point=True),
     ],
 }
 triggers_layer = {

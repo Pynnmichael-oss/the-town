@@ -19,6 +19,22 @@ export const BUILDING_SPRITE_KEYS = [
   'fourwinds',
 ];
 
+// Flavor interactions: E inside one of these rects shows a one-line text
+// bubble. Coordinates are px rects in the generated map (see the layout
+// tables in scripts/gen_town_map.py — keep in sync if props move). Adding
+// another flavor prop is one entry here, no new scene code. These are the
+// LOWEST-priority interactions: building triggers, the signpost, and the
+// cat all win over flavor when zones overlap (TownScene.resolveInteraction).
+export const FLAVOR_PROPS = [
+  { name: 'fountain', x: 608, y: 464, w: 64, h: 64, text: 'Make a wish.' },
+  { name: 'bench-plaza-w', x: 576, y: 480, w: 48, h: 48, text: 'A nice place to sit.' },
+  { name: 'bench-plaza-e', x: 672, y: 480, w: 48, h: 48, text: 'A nice place to sit.' },
+  { name: 'bench-park-w', x: 592, y: 240, w: 48, h: 48, text: 'A nice place to sit.' },
+  { name: 'bench-park-e', x: 656, y: 240, w: 48, h: 48, text: 'A nice place to sit.' },
+  { name: 'dock-boat', x: 992, y: 368, w: 64, h: 48, text: "She's seaworthy. Probably." },
+  { name: 'silo-blend', x: 592, y: 784, w: 32, h: 32, text: "Blend ratio 60/40. The silos aren't telling which is which." },
+];
+
 // Building id -> { name, url }. Matches the trigger-zone object names placed in the Tiled map.
 export const BUILDINGS = {
   touchgrass: {
