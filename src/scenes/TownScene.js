@@ -112,20 +112,47 @@ export class TownScene extends Phaser.Scene {
     this.cursors = this.input.keyboard.createCursorKeys();
     this.wasd = this.input.keyboard.addKeys('W,A,S,D,E');
 
+    // Touch devices swap "Press E" prompts for "Tap" and get quadrant
+    // steering; detection is per-device (not per-pointer) so prompt labels
+    // stay stable. Keyboard input keeps working either way.
+    this.isTouch = this.sys.game.device.input.touch;
+    this.promptVerb = this.isTouch ? 'Tap' : 'Press E';
+    this.setupTouchMovement();
+
     // 10px because the camera runs at 2x zoom - renders at an effective
-    // 20px on screen; always on top of depth-sorted buildings.
+    // 20px on screen; always on top of depth-sorted buildings. On touch it
+    // doubles as the action button, so it gets a bigger face (and a hit
+    // area padded well past it - see updatePromptHitArea).
     this.promptText = this.add
       .text(0, 0, '', {
         fontFamily: 'monospace',
-        fontSize: '10px',
+        fontSize: this.isTouch ? '12px' : '10px',
         color: '#f0f0f0',
         backgroundColor: '#000000',
-        padding: { x: 5, y: 3 },
+        padding: this.isTouch ? { x: 10, y: 7 } : { x: 5, y: 3 },
       })
       .setOrigin(0.5)
       .setScrollFactor(1)
       .setDepth(10000)
       .setVisible(false);
+
+    // Tapping the prompt is the touch equivalent of E. window.open must run
+    // synchronously inside this pointerup handler (a real user gesture) or
+    // mobile popup blockers eat the building redirect. Down+up both on the
+    // prompt = a tap; a movement finger merely released over it won't have
+    // the matching pointerdown, so it can't trigger anything.
+    this.promptDownPointer = null;
+    this.promptText.setInteractive({ useHandCursor: true });
+    this.promptText.on('pointerdown', (pointer, localX, localY, event) => {
+      this.promptDownPointer = pointer;
+      event.stopPropagation();
+    });
+    this.promptText.on('pointerup', (pointer, localX, localY, event) => {
+      if (pointer !== this.promptDownPointer) return;
+      this.promptDownPointer = null;
+      event.stopPropagation();
+      this.triggerInteraction();
+    });
 
     this.flavorZones = FLAVOR_PROPS.map((p) => ({
       rect: new Phaser.Geom.Rectangle(p.x, p.y, p.w, p.h),
@@ -150,25 +177,87 @@ export class TownScene extends Phaser.Scene {
 
     this.activeInteraction = null;
 
-    this.wasd.E.on('down', () => {
-      if (!this.activeInteraction) return;
-      const it = this.activeInteraction;
-      if (it.type === 'building') {
-        window.open(it.url, '_blank');
-      } else if (it.type === 'signpost') {
-        toggleDirectory();
-      } else if (it.type === 'cat') {
-        this.showBubble('Meow.', this.cat.x, this.cat.y - 18);
-      } else if (it.type === 'flavor') {
-        this.showBubble(it.text, this.player.x, this.player.y - 24);
-      }
-    });
+    this.wasd.E.on('down', () => this.triggerInteraction());
 
     this.footstepKeys = FOOTSTEP_KEYS.filter((key) => this.cache.audio.exists(key));
     this.stepIndex = 0;
     this.lastStepAt = 0;
 
     this.startAudio();
+  }
+
+  // Shared by the E key and the prompt tap - the one place an interaction
+  // actually fires.
+  triggerInteraction() {
+    if (!this.activeInteraction) return;
+    const it = this.activeInteraction;
+    if (it.type === 'building') {
+      window.open(it.url, '_blank');
+    } else if (it.type === 'signpost') {
+      toggleDirectory();
+    } else if (it.type === 'cat') {
+      this.showBubble('Meow.', this.cat.x, this.cat.y - 18);
+    } else if (it.type === 'flavor') {
+      this.showBubble(it.text, this.player.x, this.player.y - 24);
+    }
+  }
+
+  // Invisible d-pad: the screen splits into 4 triangles along its diagonals
+  // (an X through the center) - hold to walk toward that edge, release to
+  // stop, and dragging across a diagonal mid-hold retargets live. Only the
+  // first touch steers; extra simultaneous touches are ignored for movement
+  // (they're free to tap the prompt). Touches that land on UI (currentlyOver)
+  // never become movement.
+  setupTouchMovement() {
+    this.touchMovePointer = null;
+    this.touchDir = null;
+
+    this.input.on('pointerdown', (pointer, currentlyOver) => {
+      if (!pointer.wasTouch) return;
+      if (this.touchMovePointer) return;
+      if (currentlyOver && currentlyOver.length > 0) return;
+      this.touchMovePointer = pointer;
+      this.touchDir = this.quadrantFor(pointer);
+    });
+    this.input.on('pointermove', (pointer) => {
+      if (pointer !== this.touchMovePointer) return;
+      this.touchDir = this.quadrantFor(pointer);
+    });
+    const release = (pointer) => {
+      if (pointer === this.touchMovePointer) this.clearTouchMove();
+    };
+    this.input.on('pointerup', release);
+    this.input.on('pointerupoutside', release);
+  }
+
+  clearTouchMove() {
+    this.touchMovePointer = null;
+    this.touchDir = null;
+  }
+
+  // Which diagonal-bounded triangle the pointer is in. Offsets are
+  // normalized by the half-extents so the boundaries are the true
+  // corner-to-corner diagonals of the (non-square) screen.
+  quadrantFor(pointer) {
+    const nx = (pointer.x - this.scale.width / 2) / (this.scale.width / 2);
+    const ny = (pointer.y - this.scale.height / 2) / (this.scale.height / 2);
+    if (Math.abs(nx) >= Math.abs(ny)) return nx >= 0 ? 'right' : 'left';
+    return ny >= 0 ? 'down' : 'up';
+  }
+
+  // The prompt renders at 2x camera zoom and then gets FIT-scaled down on
+  // phones, so the visible box alone is under thumb size - pad the hit area
+  // well past it. Must re-run whenever the text (and so the width) changes.
+  updatePromptHitArea() {
+    if (!this.isTouch || !this.promptText.input) return;
+    const padX = 14;
+    const padY = 12;
+    this.promptText.input.hitArea.setTo(
+      -padX,
+      -padY,
+      this.promptText.width + padX * 2,
+      this.promptText.height + padY * 2
+    );
   }
 
   showBubble(text, x, y) {
@@ -341,15 +430,20 @@ export class TownScene extends Phaser.Scene {
 
   update() {
     if (isDirectoryOpen()) {
+      // The DOM overlay swallows touchend, so Phaser would never see the
+      // release - drop any held movement or it sticks after closing.
+      this.clearTouchMove();
       this.player.setVelocity(0);
       return;
     }
+    // Safety net for releases Phaser missed (touchcancel, focus loss).
+    if (this.touchMovePointer && !this.touchMovePointer.isDown) this.clearTouchMove();
 
     const velocity = new Phaser.Math.Vector2(0, 0);
-    if (this.cursors.left.isDown || this.wasd.A.isDown) velocity.x -= 1;
-    if (this.cursors.right.isDown || this.wasd.D.isDown) velocity.x += 1;
-    if (this.cursors.up.isDown || this.wasd.W.isDown) velocity.y -= 1;
-    if (this.cursors.down.isDown || this.wasd.S.isDown) velocity.y += 1;
+    if (this.cursors.left.isDown || this.wasd.A.isDown || this.touchDir === 'left') velocity.x -= 1;
+    if (this.cursors.right.isDown || this.wasd.D.isDown || this.touchDir === 'right') velocity.x += 1;
+    if (this.cursors.up.isDown || this.wasd.W.isDown || this.touchDir === 'up') velocity.y -= 1;
+    if (this.cursors.down.isDown || this.wasd.S.isDown || this.touchDir === 'down') velocity.y += 1;
 
     const moving = velocity.x !== 0 || velocity.y !== 0;
     if (moving) {
@@ -393,7 +487,10 @@ export class TownScene extends Phaser.Scene {
 
     this.promptText.setVisible(!!this.activeInteraction);
     if (this.activeInteraction) {
-      this.promptText.setText(this.activeInteraction.label);
+      if (this.promptText.text !== this.activeInteraction.label) {
+        this.promptText.setText(this.activeInteraction.label);
+        this.updatePromptHitArea();
+      }
       this.promptText.setPosition(this.player.x, this.player.y - 32);
     }
   }
@@ -408,7 +505,7 @@ export class TownScene extends Phaser.Scene {
     if (zone) {
       return {
         type: 'building',
-        label: `Press E to visit ${zone.building.name}`,
+        label: `${this.promptVerb} to visit ${zone.building.name}`,
         url: zone.building.url,
       };
     }
@@ -420,7 +517,7 @@ export class TownScene extends Phaser.Scene {
       this.signpost.y
     );
     if (distance <= SIGNPOST_RADIUS) {
-      return { type: 'signpost', label: 'Press E for Town Directory' };
+      return { type: 'signpost', label: `${this.promptVerb} for Town Directory` };
     }
 
     if (
@@ -428,14 +525,14 @@ export class TownScene extends Phaser.Scene {
       Phaser.Math.Distance.Between(this.player.x, this.player.y, this.cat.x, this.cat.y) <=
         CAT_RADIUS
     ) {
-      return { type: 'cat', label: 'Press E to greet the cat' };
+      return { type: 'cat', label: `${this.promptVerb} to greet the cat` };
     }
 
     const flavor = this.flavorZones.find((z) =>
       Phaser.Geom.Rectangle.Contains(z.rect, this.player.x, this.player.y)
     );
     if (flavor) {
-      return { type: 'flavor', label: 'Press E to look', text: flavor.text };
+      return { type: 'flavor', label: `${this.promptVerb} to look`, text: flavor.text };
     }
 
     return null;

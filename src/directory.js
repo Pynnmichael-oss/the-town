@@ -18,7 +18,9 @@ function buildOverlay() {
 
   const hint = document.createElement('p');
   hint.className = 'directory-hint';
-  hint.textContent = 'Press Esc or click outside to close.';
+  hint.textContent = document.body.classList.contains('touch')
+    ? 'Tap a project to visit it.'
+    : 'Press Esc or click outside to close.';
   panel.appendChild(hint);
 
   const list = document.createElement('ul');
@@ -33,6 +35,15 @@ function buildOverlay() {
     list.appendChild(li);
   });
   panel.appendChild(list);
+
+  // Explicit close control: Esc and click-outside still work, but touch
+  // users need a visible 44px+ target (styled in index.html).
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'directory-close';
+  closeBtn.type = 'button';
+  closeBtn.textContent = 'Close';
+  closeBtn.addEventListener('click', closeDirectory);
+  panel.appendChild(closeBtn);
 
   overlay.appendChild(panel);
   overlay.addEventListener('click', (e) => {

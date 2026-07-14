@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>The Town</title>
 <style>
   html, body {
@@ -11,6 +11,11 @@
     background: #0a0a0a;
     overflow: hidden;
     height: 100%;
+    /* fixed body + overscroll-behavior: kills pull-to-refresh and rubber-band
+       scrolling on mobile so drags only ever steer the player */
+    position: fixed;
+    width: 100%;
+    overscroll-behavior: none;
   }
   #game-container {
     display: flex;
@@ -18,9 +23,14 @@
     justify-content: center;
     width: 100vw;
     height: 100vh;
+    touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
   }
   canvas {
     image-rendering: pixelated;
+    touch-action: none;
   }
   #directory-overlay {
     position: fixed;
@@ -40,6 +50,7 @@
     border: 2px solid #f0d878;
     padding: 24px 32px;
     max-width: 360px;
+    margin: 16px;
     color: #f0f0f0;
   }
   .directory-panel h1 {
@@ -67,6 +78,31 @@
   }
   .directory-panel a:hover {
     text-decoration: underline;
+  }
+  .directory-close {
+    margin-top: 16px;
+    width: 100%;
+    min-height: 44px;
+    background: none;
+    border: 1px solid #f0d878;
+    color: #f0d878;
+    font-family: inherit;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .directory-close:hover {
+    background: rgba(240, 216, 120, 0.12);
+  }
+  /* body.touch is set by main.js on touch-capable devices: directory links
+     become full-width 44px+ rows so they're comfortably thumb-tappable */
+  body.touch .directory-panel a {
+    display: block;
+    padding: 13px 8px;
+    font-size: 16px;
+  }
+  body.touch .directory-panel li {
+    margin-bottom: 0;
+    border-bottom: 1px solid #333;
   }
 </style>
 </head>

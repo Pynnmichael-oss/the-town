@@ -7,6 +7,8 @@ export class TitleScene extends Phaser.Scene {
   }
 
   create() {
+    const isTouch = this.sys.game.device.input.touch;
+
     this.cameras.main.setBackgroundColor('#0a0a0a');
 
     this.createStarfield();
@@ -20,19 +22,25 @@ export class TitleScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     this.promptText = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20, 'Press Start', {
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20, isTouch ? 'Tap to Start' : 'Press Start', {
         fontFamily: 'monospace',
         fontSize: '20px',
         color: '#f0f0f0',
       })
       .setOrigin(0.5);
 
-    this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 70, '[E] Skip walking - open directory', {
-        fontFamily: 'monospace',
-        fontSize: '14px',
-        color: '#888',
-      })
+    const hintText = this.add
+      .text(
+        GAME_WIDTH / 2,
+        GAME_HEIGHT / 2 + 70,
+        isTouch ? 'Skip walking - tap here for directory' : '[E] Skip walking - open directory',
+        {
+          fontFamily: 'monospace',
+          fontSize: '14px',
+          color: '#888',
+          padding: { x: 16, y: 14 },
+        }
+      )
       .setOrigin(0.5);
 
     this.tweens.add({
@@ -49,6 +57,17 @@ export class TitleScene extends Phaser.Scene {
     );
 
     this.input.keyboard.addKey('E').on('down', () => openDirectory());
+
+    // Tap/click anywhere starts the town; the hint is its own tap target and
+    // stops propagation so opening the directory doesn't also start the game.
+    // The first tap doubles as the audio-unlock gesture (Phaser's sound
+    // manager listens for it; TownScene.startAudio waits on 'unlocked').
+    hintText.setInteractive({ useHandCursor: true });
+    hintText.on('pointerup', (pointer, localX, localY, event) => {
+      event.stopPropagation();
+      openDirectory();
+    });
+    this.input.on('pointerup', () => this.scene.start('Town'));
   }
 
   // Idle background flicker while sitting on the title screen - plain
