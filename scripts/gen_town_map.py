@@ -17,6 +17,7 @@ Run: python3 scripts/gen_town_map.py   (rewrites assets/maps/town.json)
 """
 import json
 import random
+import sys
 from pathlib import Path
 
 random.seed(1918)
@@ -243,10 +244,18 @@ for lx in (14, 22, 30):
 for lx in (12, 20, 28, 48, 54):
     put(lx, 34, LAMP[0]); put(lx, 35, LAMP[1])
 
-# industrial yard: chain-link fence with a gate aligned to the south path
-for fx in list(range(30, 38)) + list(range(43, 53)):
-    put(fx, 42, CHAIN_POST if fx in (30, 37, 43, 52) else CHAIN[fx % 3])
-put(31, 45, CRATE); put(31, 46, CRATE); put(43, 46, BARREL)
+# industrial yard: chain-link fence, open on the west side (columns 30-37
+# stay gap-free) so the south-path gate connects across to the x=30-32
+# margin corridor and down into the yard - the gate alone dead-ends into the
+# twin_silo footprint (x 33-42), so the fence-free run has to reach past it.
+# Only the east run (43-52) is actually fenced.
+for fx in range(43, 53):
+    put(fx, 42, CHAIN_POST if fx in (43, 52) else CHAIN[fx % 3])
+# Crates pulled out of the x=30-32 corridor (a 1-wide obstacle there pinches
+# the player's 18px body below passable) and off the twin_silo footprint
+# itself (36-37,46 sat under the building sprite) onto open apron floor
+# south of the buildings instead.
+put(46, 52, CRATE); put(47, 52, CRATE); put(43, 46, BARREL)
 put(51, 52, COAL); put(50, 53, COAL); put(33, 53, BARRICADE)
 put(30, 47, LAMP[0]); put(30, 48, LAMP[1])
 put(52, 47, LAMP[0]); put(52, 48, LAMP[1])
@@ -326,3 +335,22 @@ town = {
 out = Path(__file__).resolve().parent.parent / 'assets' / 'maps' / 'town.json'
 out.write_text(json.dumps(town))
 print(f'wrote {out} ({out.stat().st_size} bytes)')
+
+# Regression guard: every trigger must be walkable from spawn, both across
+# any terrain and along the paved path/plaza network alone (the stricter
+# pass - it's what catches a gate that dead-ends into a building footprint,
+# e.g. the industrial-yard bug this check was added for). Fails loudly
+# rather than silently shipping an unreachable building.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from check_reachability import unreachable_triggers  # noqa: E402
+
+_failed = False
+for _paved_only, _label in ((False, 'any terrain'), (True, 'paved network')):
+    _bad = unreachable_triggers(out, paved_only=_paved_only)
+    if _bad:
+        print(f'REACHABILITY FAIL ({_label}): unreachable triggers: {", ".join(_bad)}')
+        _failed = True
+    else:
+        print(f'reachability OK ({_label}): every trigger walkable from spawn')
+if _failed:
+    sys.exit(1)
