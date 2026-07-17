@@ -21,10 +21,13 @@ window.game = new Phaser.Game({
   disableContextMenu: true,
   // FIT keeps the 800x600 world letterboxed and aspect-correct on phones in
   // either orientation; the CSS image-rendering: pixelated in index.html
-  // keeps the scaled canvas crisp.
+  // keeps the scaled canvas crisp. Centering is owned by #game-container's
+  // flex (whose height tracks the *visible* viewport via --app-height) —
+  // NO_CENTER because Phaser's own centering margins would stack on top of
+  // the flex centering and shove the canvas below center.
   scale: {
     mode: Phaser.Scale.FIT,
-    autoCenter: Phaser.Scale.CENTER_BOTH,
+    autoCenter: Phaser.Scale.NO_CENTER,
     width: GAME_WIDTH,
     height: GAME_HEIGHT,
   },

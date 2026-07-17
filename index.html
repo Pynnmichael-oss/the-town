@@ -22,7 +22,14 @@
     align-items: center;
     justify-content: center;
     width: 100vw;
-    height: 100vh;
+    /* 100vh measures the LARGEST viewport state (mobile toolbar collapsed),
+       which sits the flex-centered canvas visually low while the toolbar is
+       showing. Layered fallbacks — the last supported one wins: dvh tracks
+       the dynamic viewport, --app-height is the exact visualViewport height
+       kept in sync by the inline script in <head>. */
+    height: 100vh; /* fallback for older browsers */
+    height: 100dvh; /* dynamic viewport height, accounts for mobile toolbar */
+    height: calc(var(--app-height, 100vh)); /* JS-computed exact value, see <head> script */
     touch-action: none;
     -webkit-touch-callout: none;
     -webkit-user-select: none;
@@ -105,6 +112,26 @@
     border-bottom: 1px solid #333;
   }
 </style>
+<script>
+  // Runs before first layout/paint: pins --app-height to the *visible*
+  // viewport height. visualViewport tracks the mobile toolbar as it
+  // expands/collapses; innerHeight is the fallback where visualViewport
+  // doesn't exist, and if this script never ran at all the CSS falls back
+  // to 100dvh/100vh on its own.
+  function setAppHeight() {
+    var h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    document.documentElement.style.setProperty('--app-height', h + 'px');
+  }
+  setAppHeight();
+  window.addEventListener('resize', setAppHeight);
+  window.addEventListener('orientationchange', function () {
+    setTimeout(setAppHeight, 100);
+  });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', setAppHeight);
+    window.visualViewport.addEventListener('scroll', setAppHeight);
+  }
+</script>
 </head>
 <body>
 <div id="game-container"></div>
